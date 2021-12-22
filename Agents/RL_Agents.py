@@ -34,7 +34,7 @@ class DDQN_PER_Agent:
         :param device:                 Pass a device i.e. gpu/cuda/cpu to be used by the agent and replay buffer        
         '''
         self.memory = PrioritizedExperienceReplay(state_dim, 1, memory_min_train_size, memory_maxlength, n_step_return=n_step_return, gamma=gamma, device=device)
-        self.policy = DDQN(state_dim, action_dim, gamma, noisy_networks=noisy_networks, device=device)
+        self.policy = DDQN(state_dim, action_dim, n_step_return, gamma, noisy_networks=noisy_networks, device=device)
         
         self.memory.PER_b_increment = 0.000001        
         self.batchsize = batchsize 
@@ -56,14 +56,18 @@ class DDQN_PER_Agent:
             int(done) 
         )
         self.count += 1
-        
-        if self.memory.min_train_size_reached() and self.count % self.train_freq == 0 :
+
+        if done:
+            self.policy.update()
+
+        # Sample parameter noise if using Noisy Networks
+        if self.noisy_networks and self.count % self.train_freq == 0 ::
+            self.policy.reset_noise()
+            
+
+        if self.memory.min_train_size_reached() and self.count % self.train_freq == 0:
             batches = 4
             avg_loss = 0.0
-            
-            # Sample parameter noise if using Noisy Networks
-            if self.noisy_networks:
-                self.policy.reset_noise()
             
             for _ in range(batches):
                 # Sample transitions from the replay memory and train the policy network
@@ -74,5 +78,5 @@ class DDQN_PER_Agent:
                 self.memory.update_priorities(tree_idxs, td_error)
                 avg_loss += loss
                 
-            self.policy.update(self.count // self.train_freq)
+            self.policy.update_target_network(self.count // self.train_freq)
             return avg_loss / batches

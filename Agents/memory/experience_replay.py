@@ -91,7 +91,7 @@ class ReplayBuffer(Memory):
         '''
 
         batch_idx = self.sample_idxs(batch_size)     
-        return self._get(batch_idx)
+        return batch_idx, self._get(batch_idx), torch.ones(batch_size).to(self.device)
     
     def _get(self, batch_idx):
         
@@ -157,7 +157,11 @@ class ReplayBuffer(Memory):
         self.n_step = new_n_step
         self.gamma = self.gamma if new_gamma is None else new_gamma
         self.n_step_gamma = torch.pow(self.gamma, torch.arange(self.n_step)).to(torch.float32).to(self.device)
-    
+
+    def update_priorities(self, tree_idx, abs_errors):
+        """When using standard replay buffer there is no priority sampling mechanism. This is to simplify interface between memory buffer and agents."""
+        pass 
+   
     
 class PrioritizedExperienceReplay(Memory):
     '''
