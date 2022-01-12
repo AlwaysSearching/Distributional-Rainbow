@@ -12,6 +12,7 @@ class DuelingNetwork(nn.Module):
         # Atom = 1 allows us to use the below for standard RL. 
         self.atoms = atoms
         self.hist = frame_hist
+        self.act_dim = act_dim
 
         self.conv_layers = nn.Sequential(
                 nn.Conv2d(self.hist, 32, 5,  stride=5, padding=0), nn.ReLU(),
@@ -41,11 +42,11 @@ class DuelingNetwork(nn.Module):
         
         #  Value Stream
         state_value = self.Relu(self.state_value_layer_1(x))
-        state_value = self.state_value_layer_2(state_value)
+        state_value = self.state_value_layer_2(state_value).view(-1, 1, self.atoms)
 
         # Advantage Stream
         advantage = self.Relu(self.advantage_layer_1(x))
-        advantage = self.advantage_layer_2(advantage)
+        advantage = self.advantage_layer_2(advantage).view(-1, self.act_dim, self.atoms)
         
         # Q(s, a) = V(s) + A(s, a) - sum_{a \in A}{A(s, a)} / |A|
         action_value = state_value + advantage - torch.mean(advantage, dim=-1, keepdims=True)

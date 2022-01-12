@@ -7,7 +7,7 @@ import numpy as np
 from Agents.Networks import DuelingNetwork
 
 class DQN:
-    def __init__(self, fram_hist, act_dim, n_steps, gamma=0.99, n_hid=64, lr=1e-4, epsilon=0.9, tau=1, device=None, clip_grad_val=None, network=None):
+    def __init__(self, frame_hist, act_dim, n_steps, gamma=0.99, n_hid=64, lr=1e-4, epsilon=0.9, tau=1, device=None, clip_grad_val=None, network=None):
         '''
         Baseline implimentation of Q-Function:
         
