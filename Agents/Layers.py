@@ -14,7 +14,17 @@ class NoisyLinear(nn.Module):
         https://arxiv.org/pdf/1706.10295.pdf
     '''
 
-    def __init__(self, in_features, out_features, std_init=0.5):
+    def __init__(self, in_features: int, out_features: int, std_init: float=0.5):
+        """
+        Parameters
+        ----------
+        in_features : int
+            Number of input features.
+        out_features : int
+            Number of output features.
+        std_init : float
+            Initial standard deviation of the weights.
+        """
         super(NoisyLinear, self).__init__()
         
         self.in_features = in_features
@@ -25,10 +35,10 @@ class NoisyLinear(nn.Module):
         self.weight_mu = nn.Parameter(torch.empty(out_features, in_features))
         self.weight_sigma = nn.Parameter(torch.empty(out_features, in_features))
         
-        
         self.bias_mu = nn.Parameter(torch.empty(out_features))
         self.bias_sigma = nn.Parameter(torch.empty(out_features))
-        
+
+        # Register buffers will not be optimized by the optimizer but will be saved in the state dict 
         self.register_buffer('weight_epsilon', torch.empty(out_features, in_features))
         self.register_buffer('bias_epsilon', torch.empty(out_features))
         
@@ -36,6 +46,7 @@ class NoisyLinear(nn.Module):
         self.reset_noise()
 
     def reset_parameters(self):
+
         mu_range = 1 / np.sqrt(self.in_features)
         
         self.weight_mu.data.uniform_(-mu_range, mu_range)

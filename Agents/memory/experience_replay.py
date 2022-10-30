@@ -1,3 +1,5 @@
+from typing import Optional
+
 from Agents.memory.base import Memory
 from Agents.memory.sumtree import SumTree
 
@@ -21,11 +23,19 @@ class ReplayBuffer(Memory):
     When a batch of experiences is requested, K experiences are sampled according to a random uniform distribution.
     '''
 
-    def __init__(self, state_dim, action_dim, min_train_size=None, max_size=1_000, n_step_return=None, gamma=None, device=None):
+    def __init__(
+        self, 
+        state_dim: int, 
+        action_dim: int, 
+        min_train_size: int=256,
+        max_size: int=1_000, 
+        n_step_return: Optional[int]=None, 
+        gamma: Optional[int]=None, device=None
+    ):
         super().__init__()
         
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
-        self.min_train_size = 256 if min_train_size is None else min_train_size
+        self.min_train_size = min_train_size
         self.max_size = max_size
         
         self.size = 0           # total experiences stored
