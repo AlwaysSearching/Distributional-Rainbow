@@ -6,7 +6,7 @@ import torch
 
 import numpy as np
 
-from Agents.Layers import NoisyLinear
+from Layers import NoisyLinear
 
 
 class DuelingNetwork(nn.Module):

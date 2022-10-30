@@ -6,7 +6,7 @@ import torch
 
 import numpy as np
 
-from Agents.Networks import DuelingNetwork
+from Networks import DuelingNetwork
 
 LOG = logging.getLogger(__name__)
 
@@ -108,8 +108,6 @@ class DQN:
 
     def train_network(self, experience, IS_weights):
         # Compute the Q-targets and TD-Error
-
-        avg_loss = 0.0
         loss, error = self.get_loss(experience, IS_weights)
         self.model.train_step(loss, self.optim, self.lr_scheduler)
 

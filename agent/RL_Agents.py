@@ -1,8 +1,8 @@
 from typing import Literal
 
-from Agents.memory.experience_replay import PrioritizedExperienceReplay
-from Agents.QNetworks import DQN, DDQN
-from Agents.dist_QNetworks import Categorical_DDQN
+from memory.experience_replay import PrioritizedExperienceReplay
+from QNetworks import DQN, DDQN
+from dist_QNetworks import Categorical_DDQN
 
 POLICY = {
     "DQN": DQN,

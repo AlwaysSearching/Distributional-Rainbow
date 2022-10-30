@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
 
+
 class Memory(ABC):
     def __init__(self):
-        self.data_keys = ['states', 'actions', 'next_states', 'priorities']
+        self.data_keys = ['states', 'actions', 'next_states', 'rewards', 'dones', 'timestep']
 
     @abstractmethod
     def reset(self):
@@ -11,10 +12,7 @@ class Memory(ABC):
     
     @abstractmethod
     def update(self, state, action, reward, next_state, done):
-        '''
-        Implement memory update given the full info from the latest timestep. NOTE: guard for np.nan reward and done when individual env resets.
-        Return True if memory is ready to be sampled for training, False  otherwise
-        '''
+        '''Implement memory update given the full info from the latest timestep.'''
         pass
 
     @abstractmethod

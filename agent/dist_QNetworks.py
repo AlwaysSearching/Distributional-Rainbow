@@ -4,8 +4,8 @@ from torch import nn
 from torch import optim
 import torch
 
-from Agents.Networks import DuelingNetwork
-from Agents.QNetworks import DDQN
+from Networks import DuelingNetwork
+from QNetworks import DDQN
 
 
 class Categorical_DDQN(DDQN):
