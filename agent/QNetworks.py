@@ -8,12 +8,13 @@ import torch
 import numpy as np
 
 from agent.Networks import DuelingNetwork
+from agent.base_agent import BaseAgent
 from memory.base import ReplayBatch
 
 LOG = logging.getLogger(__name__)
 
 
-class DQN:
+class DQN(BaseAgent):
     def __init__(
         self,
         frame_hist: int,
@@ -270,7 +271,6 @@ class DDQN(DQN):
             network=network,
         )
 
-
     def init_network(self, network: nn.Module) -> None:
         """Initialize the neural network related objects used to learn the policy function"""
         self.model = network(
@@ -291,7 +291,7 @@ class DDQN(DQN):
         # copy parameters from model to target
         self.target.polyak_update(
             source_network=self.model, source_ratio=1.0
-        )  
+        )
 
         # We do not need to compute the gradients of the target network. It will be periodically
         # updated using the parameters in the online network.
@@ -338,5 +338,7 @@ class DDQN(DQN):
     def reset_noise(self):
         self.online_network.reset_noise()
 
-    def update(self):
-        super().update()
+    def update(self, **kwargs):
+        train_step = kwargs["train_step"]
+        self.update_target_network(train_step)
+        super().update(**kwargs)

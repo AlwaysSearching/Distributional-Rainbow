@@ -1,10 +1,6 @@
-from typing import Optional
-
 from torch import nn
 from torch import optim
 import torch
-
-import numpy as np
 
 from agent.Layers import NoisyLinear
 
@@ -14,12 +10,12 @@ class DuelingNetwork(nn.Module):
         self,
         frame_hist: int,
         act_dim: int,
-        atoms: int=1,
-        n_hid: int=128,
-        noisy: bool=True,
-        clip_grad_val:float=None,
+        atoms: int = 1,
+        n_hid: int = 128,
+        noisy: bool = True,
+        clip_grad_val: float = None,
     ) -> None:
-        """Instantiate a Dueling Network in conjunction with Noisy Linear layers and a Categorical Distribution. 
+        """Instantiate a Dueling Network in conjunction with Noisy Linear layers and a Categorical Distribution.
 
         Parameters
         ----------
@@ -34,13 +30,14 @@ class DuelingNetwork(nn.Module):
 
         n_hid: int
             number of hidden units in the feed forward network
-        
+
         noisy: bool
             whether to use noisy layers in the network
 
         clip_grad_val: float
             value to clip the gradient norm to. If None, no clipping is performed.
         """
+
         super(DuelingNetwork, self).__init__()
 
         # Atom = 1 allows us to use the below for standard RL.
@@ -107,13 +104,16 @@ class DuelingNetwork(nn.Module):
         )
         return action_value
 
-    def train_step(self, 
-        loss: torch.Tensor, 
-        optim: optim.optimizer, 
-        lr_scheduler: 
-        optim.lr_scheduler=None
+    def train_step(
+        self,
+        loss: torch.Tensor,
+        optim: optim.optimizer,
+        lr_scheduler: optim.lr_scheduler = None
     ) -> torch.Tensor:
-        """Perform a single training step on the network. Clip the gradient norm and update the learning rate if specified."""
+        """
+        Perform a single training step on the network.
+        Clip the gradient norm and update the learning rate if specified.
+        """
         optim.zero_grad()
         loss.backward()
 
@@ -126,13 +126,13 @@ class DuelingNetwork(nn.Module):
 
         return loss
 
-    def reset_noise(self):
+    def reset_noise(self) -> None:
         """resample the noise parameter for each Noisy layer in the network"""
         for name, module in self.named_children():
             if name in self.noisy_layers:
                 module.reset_noise()
 
-    def polyak_update(self, source_network: nn.Module, source_ratio: float=0.5):
+    def polyak_update(self, source_network: nn.Module, source_ratio: float = 0.5) -> None:
         """
         Update the parameters of the network with the parameters of the source network.
         source_ratio = 1.0 simply performs a copy, rather than a polyak update.
