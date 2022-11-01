@@ -4,8 +4,8 @@ from torch import nn
 from torch import optim
 import torch
 
-from Networks import DuelingNetwork
-from QNetworks import DDQN
+from agent.Networks import DuelingNetwork
+from agent.QNetworks import DDQN
 
 
 class Categorical_DDQN(DDQN):
@@ -20,6 +20,7 @@ class Categorical_DDQN(DDQN):
         gamma: float = 0.99,
         n_hid: int = 64,
         lr: float = 1e-4,
+        tau: float = 1.0,
         epsilon: float = 0.01,
         device: Optional[torch.cuda.Device] = None,
         clip_grad_val: Optional[float] = None,
@@ -50,15 +51,25 @@ class Categorical_DDQN(DDQN):
             Number of hidden units in the network, by default 64
         lr : float, optional
             Learning rate, by default 1e-4
+        tau : float, optional
+            Temperature for Boltzmann policy, by default 1
         epsilon : float, optional
             Epsilon for epsilon greedy policy, by default 0.01
         device : torch.cuda.Device, optional
             Device to run the network on, by default None
         """
-        self.device = (
-            torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            if device is None
-            else device
+
+        super().__init__(
+            frame_hist=frame_hist,
+            act_dim=act_dim,
+            n_steps=n_steps,
+            gamma=gamma,
+            n_hid=n_hid,
+            lr=lr,
+            epsilon=epsilon,
+            device=device,
+            clip_grad_val=clip_grad_val,
+            network=network,
         )
 
         # Categorical Distribution hyper params
@@ -67,22 +78,6 @@ class Categorical_DDQN(DDQN):
         self.V_max = V_max
         self.support = torch.linspace(V_min, V_max, atoms).to(self.device)
         self.dz = (V_max - V_min) / (atoms - 1)
-
-        # NN hyper parameters
-        self.act_dim = act_dim
-        self.frame_hist = frame_hist
-        self.gamma = gamma
-        self.n_hid = n_hid
-        self.lr = lr
-
-        # action_selection hyper parameters
-        self.epsilon = epsilon
-        self.epsilon_decay_rate = 0.9999
-        self.min_epsilon = 0.001
-
-        self.clip_grad_val = clip_grad_val
-        self.n_steps = n_steps
-        self.init_network(network)
 
     def init_network(self, network: nn.Module = None) -> None:
         """Initialize the network and optimizer"""

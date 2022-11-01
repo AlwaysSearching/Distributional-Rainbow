@@ -1,4 +1,16 @@
+from typing import TypedDict
 from abc import ABC, abstractmethod
+
+import torch
+
+
+class ReplayBatch(TypedDict):
+    """A batch of data returned by a replay buffer."""
+    states: torch.Tensor
+    actions: torch.Tensor
+    next_states: torch.Tensor
+    rewards: torch.Tensor
+    dones: torch.Tensor
 
 
 class Memory(ABC):

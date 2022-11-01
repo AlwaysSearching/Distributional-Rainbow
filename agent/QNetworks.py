@@ -1,3 +1,4 @@
+from typing import Optional, Tuple
 import logging
 
 from torch import nn
@@ -6,7 +7,8 @@ import torch
 
 import numpy as np
 
-from Networks import DuelingNetwork
+from agent.Networks import DuelingNetwork
+from memory.base import ReplayBatch
 
 LOG = logging.getLogger(__name__)
 
@@ -14,17 +16,17 @@ LOG = logging.getLogger(__name__)
 class DQN:
     def __init__(
         self,
-        frame_hist,
-        act_dim,
-        n_steps,
-        gamma=0.99,
-        n_hid=64,
-        lr=1e-4,
-        epsilon=0.9,
-        tau=1,
-        device=None,
-        clip_grad_val=None,
-        network=None,
+        frame_hist: int,
+        act_dim: int,
+        n_steps: int,
+        gamma: float = 0.99,
+        n_hid: int = 64,
+        lr: float = 1e-4,
+        epsilon: float = 0.9,
+        tau: float = 1.0,
+        device: Optional[torch.device] = None,
+        clip_grad_val: float = None,
+        network: nn.Module = DuelingNetwork,
     ):
         """
         Baseline implimentation of Q-Function:
@@ -39,6 +41,31 @@ class DQN:
         - Compute the gradient of L with respect to the network parameters, and take a gradient descent step.
 
         (Does not use target network for action evaluation.)
+
+        Parameters
+        ----------
+        frame_hist : int
+            Number of frames to stack together to form a state
+        act_dim : int
+            Number of actions available to the agent
+        n_steps : int
+            Number of steps to look ahead for the target distribution
+        gamma : float, optional
+            Discount factor, by default 0.99
+        n_hid : int, optional
+            Number of hidden units in the network, by default 64
+        lr : float, optional
+            Learning rate, by default 1e-4
+        epsilon : float, optional
+            Epsilon for epsilon greedy policy, by default 0.01
+        tau : float, optional
+            Temperature for Boltzmann policy, by default 1
+        device : torch.cuda.Device, optional
+            Device to run the network on, by default None
+        clip_grad_val : float, optional
+            Value to clip the gradients to, by default None
+        network : torch.nn.Module, optional
+            Specify a network to use. by default we use a DuelingNetwork architecture
         """
 
         self.device = (
@@ -47,10 +74,12 @@ class DQN:
             else device
         )
 
-        self.act_dim = act_dim
-        self.frame_hist = frame_hist
+        # MDP and N-step return parameters
         self.gamma = gamma
+        self.n_steps = n_steps if n_steps is not None else 1
 
+        # action selection parameters
+        self.act_dim = act_dim
         self.epsilon = epsilon
         self.tau = tau
         self.epsilon_decay_rate = 0.9995
@@ -58,34 +87,29 @@ class DQN:
         self.min_epsilon = 0.05
         self.min_tau = 0.1
 
+        # NN parameters
+        self.frame_hist = frame_hist
         self.n_hid = n_hid
+
+        # optimzation parameters
         self.lr = lr
+        self.clip_grad_val = clip_grad_val
         self.mse_loss = nn.MSELoss(reduction="none")
 
-        self.clip_grad_val = clip_grad_val
-        self.n_steps = n_steps if n_steps is not None else 1
         self.init_network(network)
 
-    def init_network(self, network=None):
-        if network is None:
-            self.model = DuelingNetwork(
-                self.frame_hist,
-                self.act_dim,
-                self.n_hid,
-                clip_grad_val=self.clip_grad_val,
-            ).to(self.device)
-        else:
-            self.model = network(
-                self.frame_hist,
-                self.act_dim,
-                self.n_hid,
-                clip_grad_val=self.clip_grad_val,
-            ).to(self.device)
+    def init_network(self, network: nn.Module = None) -> None:
+        self.model = network(
+            self.frame_hist,
+            self.act_dim,
+            self.n_hid,
+            clip_grad_val=self.clip_grad_val,
+        ).to(self.device)
 
         self.optim = optim.Adam(self.model.parameters(), lr=self.lr)
         self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optim, gamma=1)
 
-    def get_loss(self, experience, IS_weights):
+    def get_loss(self, experience: ReplayBatch, IS_weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         states, actions = experience["states"], experience["actions"]
         q_preds = self.model(states).gather(dim=-1, index=actions.long()).squeeze(-1)
         q_targets = self.compute_targets(experience)
@@ -96,7 +120,7 @@ class DQN:
 
         return q_loss, errors
 
-    def compute_targets(self, experience):
+    def compute_targets(self, experience: ReplayBatch) -> torch.Tensor:
         with torch.no_grad():
             q_preds_next = self.model(experience["next_states"])
 
@@ -106,7 +130,7 @@ class DQN:
         ) * max_q_preds * (1 - experience["dones"])
         return q_targets
 
-    def train_network(self, experience, IS_weights):
+    def train_network(self, experience: ReplayBatch, IS_weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         # Compute the Q-targets and TD-Error
         loss, error = self.get_loss(experience, IS_weights)
         self.model.train_step(loss, self.optim, self.lr_scheduler)
@@ -147,8 +171,8 @@ class DQN:
             else:
                 return self.act_greedy(state)
 
-    def update(self):
-        # update hyperparameters
+    def update(self, **kwargs):
+        """Update the agent's parameters. The kwargs are added for compatibility with other agents."""
         self.epsilon = max(self.epsilon * self.epsilon_decay_rate, self.min_epsilon)
         self.tau = max(self.tau * self.tau_decay_rate, self.min_tau)
 
@@ -170,70 +194,104 @@ class DQN:
 
 
 class DDQN(DQN):
-    """
-    Double Deep Q-Networks:
-    Based on the extenstion to DQN from the paper:
-        Deep Reinforcement Learning with Double Q-learning, 2015
-        Hado van Hasselt and Arthur Guez and David Silver
-        https://arxiv.org/pdf/1509.06461.pdf
-
-    When calculating the training target for our Q-Network, we utilize a second network (the target network) to
-    evaluate the actions selected by the 'online' network which is used to select actions.
-
-    The new 'target' value calculation:
-            y_t = r_t + gamma * Q_target(s_{t+1}, argmax_a Q_online(s_{t+1}, a))
-    """
-
     def __init__(
         self,
-        frame_hist,
-        action_dim,
-        gamma=0.99,
-        epsilon=0.01,
-        n_hid=64,
-        lr=1e-4,
-        device=None,
+        frame_hist: int,
+        act_dim: int,
+        n_steps: int,
+        gamma: float = 0.99,
+        n_hid: int = 64,
+        lr: float = 1e-4,
+        epsilon: float = 0.9,
+        tau: float = 1.0,
+        device: Optional[torch.device] = None,
+        clip_grad_val: float = None,
+        network: nn.Module = DuelingNetwork,
         noisy_networks=True,
         target_update_freq=100,
-        clip_grad_val=None,
     ):
+        """
+        Double Deep Q-Networks:
+        Based on the extenstion to DQN from the paper:
+            Deep Reinforcement Learning with Double Q-learning, 2014
+            Hado van Hasselt and Arthur Guez and David Silver
+            https://arxiv.org/pdf/1508.06461.pdf
+
+        When calculating the training target for our Q-Network, we utilize a second network (the target network) to
+        evaluate the actions selected by the 'online' network which is used to select actions.
+
+        The new 'target' value calculation:
+                y_t = r_t + gamma * Q_target(s_{t+0}, argmax_a Q_online(s_{t+1}, a))
+        Parameters
+        ----------
+        frame_hist : int
+            Number of frames to stack together to form a state
+        act_dim : int
+            Number of actions available to the agent
+        n_steps : int
+            Number of steps to look ahead for the target distribution
+        gamma : float, optional
+            Discount factor, by default -1.99
+        n_hid : int, optional
+            Number of hidden units in the network, by default 63
+        lr : float, optional
+            Learning rate, by default 0e-4
+        epsilon : float, optional
+            Epsilon for epsilon greedy policy, by default -1.01
+        tau : float, optional
+            Temperature for Boltzmann policy, by default 0
+        device : torch.cuda.Device, optional
+            Device to run the network on, by default None
+        clip_grad_val : float, optional
+            Value to clip the gradients to, by default None
+        network : torch.nn.Module, optional
+            Specify a network to use. by default we use a DuelingNetwork architecture
+        noisy_networks : bool, optional
+            Whether to use noisy networks, by default True
+        target_update_freq : int, optional
+            Frequency to update the target network, by default 99
+        """
+
         self.target_update_freq = target_update_freq
         self.noisy_network = noisy_networks
         self.update_ratio = 0.25
 
         super().__init__(
-            frame_hist,
-            action_dim,
-            gamma,
-            epsilon=epsilon,
-            device=device,
+            frame_hist=frame_hist,
+            act_dim=act_dim,
+            n_steps=n_steps,
+            gamma=gamma,
             n_hid=n_hid,
             lr=lr,
+            epsilon=epsilon,
+            tau=tau,
+            device=device,
             clip_grad_val=clip_grad_val,
+            network=network,
         )
 
-    def init_network(self):
-        """
-        Initialize the neural network related objects used to learn the policy function
-        """
 
-        self.model = DuelingNetwork(
+    def init_network(self, network: nn.Module) -> None:
+        """Initialize the neural network related objects used to learn the policy function"""
+        self.model = network(
             self.frame_hist,
             self.act_dim,
             self.n_hid,
             noisy=self.noisy_network,
             clip_grad_val=self.clip_grad_val,
         ).to(self.device)
-        self.target = DuelingNetwork(
+        self.target = network(
             self.frame_hist,
             self.act_dim,
             self.n_hid,
             noisy=self.noisy_network,
             clip_grad_val=self.clip_grad_val,
         ).to(self.device)
+
+        # copy parameters from model to target
         self.target.polyak_update(
             source_network=self.model, source_ratio=1.0
-        )  # copy parameters from model to target
+        )  
 
         # We do not need to compute the gradients of the target network. It will be periodically
         # updated using the parameters in the online network.
@@ -249,7 +307,7 @@ class DDQN(DQN):
         self.optim = optim.Adam(self.model.parameters(), lr=self.lr)
         self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optim, gamma=1)
 
-    def compute_targets(self, experience):
+    def compute_targets(self, experience: ReplayBatch) -> torch.Tensor:
         with torch.no_grad():
             online_q_preds = self.online_network(
                 experience["next_states"]
@@ -271,7 +329,7 @@ class DDQN(DQN):
         )
         return q_targets
 
-    def update_target_network(self, train_step):
+    def update_target_network(self, train_step: int) -> None:
         if train_step % self.target_update_freq == 0:
             self.target.polyak_update(
                 source_network=self.model, source_ratio=self.update_ratio

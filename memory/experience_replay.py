@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Optional, Tuple, Union
 
-from memory.base import Memory
+from memory.base import Memory, ReplayBatch
 from memory.sumtree import SumTree
 
 import numpy as np
@@ -67,7 +67,14 @@ class ReplayBuffer(Memory):
         self.size = 0
         self.head = -1
 
-    def update(self, state, action, reward, next_state, done):
+    def update(
+        self, 
+        state: Union[np.ndarray, torch.Tensor], 
+        action: Union[np.ndarray, torch.Tensor], 
+        reward: Union[np.ndarray, torch.Tensor], 
+        next_state: Union[np.ndarray, torch.Tensor], 
+        done: Union[np.ndarray, torch.Tensor]
+    ) -> None:
         '''Implementation for update() to add experience to memory, expanding the memory size if necessary'''
 
         # Move head pointer. Wrap around if necessary.
@@ -86,7 +93,7 @@ class ReplayBuffer(Memory):
 
         self.t = 0 if done else self.t + 1
 
-    def sample(self, batch_size):
+    def sample(self, batch_size: int) -> Tuple[np.ndarray, ReplayBatch, torch.Tensor]:
         '''
         Returns a batch of batch_size samples. Batch is stored as a dict.
         Keys are the names of the different elements of an experience. 
@@ -104,7 +111,7 @@ class ReplayBuffer(Memory):
         batch_idx = self.sample_idxs(batch_size)
         return batch_idx, self._get(batch_idx), torch.ones(batch_size).to(self.device)
 
-    def _get(self, batch_idx):
+    def _get(self, batch_idx: np.ndarray) -> ReplayBatch:
         '''Returns a batch of experiences given a list of indices'''
         # if we are using N-step returns, extend the indxs for n steps.
         if self.n_step is not None:
@@ -112,7 +119,7 @@ class ReplayBuffer(Memory):
                 [torch.arange(idx, idx + self.n_step, dtype=torch.int64) % self.max_size for idx in batch_idx]
             )
 
-        batch = {}
+        batch = ReplayBatch()
         for key in self.data_keys:
             batch[key] = getattr(self, key)[batch_idx]
 
@@ -141,7 +148,7 @@ class ReplayBuffer(Memory):
 
         return batch
 
-    def sample_idxs(self, batch_size):
+    def sample_idxs(self, batch_size: int) -> np.ndarray:
         '''Batch indices a sampled random uniformly'''
 
         valid = False
@@ -162,13 +169,13 @@ class ReplayBuffer(Memory):
     def min_train_size_reached(self):
         return self.seen_size >= self.min_train_size
 
-    def update_n_step(self, new_n_step, new_gamma=None):
+    def update_n_step(self, new_n_step :int, new_gamma: float = None) -> None:
         '''Update the length of the n-step returns to use in sampling.'''
         self.n_step = new_n_step
         self.gamma = self.gamma if new_gamma is None else new_gamma
         self.n_step_gamma = torch.pow(self.gamma, torch.arange(self.n_step)).to(torch.float32).to(self.device)
 
-    def update_priorities(self, tree_idx, abs_errors):
+    def update_priorities(self, tree_idx: np.ndarray, abs_errors: torch.Tensor) -> None:
         """
         When using standard replay buffer there is no priority sampling mechanism.
         This is to simplify interface between memory buffer and agents.
@@ -185,24 +192,23 @@ class PrioritizedExperienceReplay(Memory):
 
     Data is stored on GPU, and indexes are produced via a sum tree which tracks the priorities of each transition.
     '''
-
     def __init__(
         self,
-        state_dim,
-        action_dim,
-        min_train_size=None,
-        max_size=1_000,
-        n_step_return=None,
-        gamma=None,
-        device=None
+        state_dim: int,
+        action_dim: int,
+        min_train_size: int = 256,
+        max_size: int = 1_000,
+        n_step_return: Optional[int] = None,
+        gamma: Optional[int] = None,
+        device: torch.device = None
     ):
         super().__init__()
 
         self.ReplayBuffer = ReplayBuffer(
-            state_dim,
-            action_dim,
-            min_train_size,
-            max_size,
+            state_dim=state_dim,
+            action_dim=action_dim,
+            min_train_size=min_train_size,
+            max_size=max_size,
             n_step_return=n_step_return,
             gamma=gamma,
             device=device
@@ -216,11 +222,18 @@ class PrioritizedExperienceReplay(Memory):
         self.PER_b_increment = 0.000001
         self.max_absolute_error = 30.  # clipped abs error
 
-    def reset(self):
+    def reset(self) -> None:
         self.ReplayBuffer.reset()
         self.SumTree.reset()
 
-    def update(self, state, action, reward, next_state, done):
+    def update(
+        self, 
+        state: Union[np.ndarray, torch.Tensor], 
+        action: Union[np.ndarray, torch.Tensor], 
+        reward: Union[np.ndarray, torch.Tensor], 
+        next_state: Union[np.ndarray, torch.Tensor], 
+        done: Union[np.ndarray, torch.Tensor]
+    ) -> None:
         """
         Add new transition to the replay buffer.
         Each new experience is given max_prority to ensure that it is trained on
@@ -239,7 +252,7 @@ class PrioritizedExperienceReplay(Memory):
         # Add experience to the Replay Buffer
         self.ReplayBuffer.update(state, action, reward, next_state, done)
 
-    def sample(self, batch_size):
+    def sample(self, batch_size: int) -> Tuple[np.ndarray, ReplayBatch, torch.Tensor]:
         """
         Sample a minibatch of k size.
         First split the tree into k ranges. Then sample values uniformly from each range.
@@ -282,7 +295,7 @@ class PrioritizedExperienceReplay(Memory):
         batch = self.ReplayBuffer._get(batch_idxs)
         return tree_idxs, batch, torch.tensor(IS_Weights).to(self.ReplayBuffer.device)
 
-    def update_priorities(self, tree_idx, abs_errors):
+    def update_priorities(self, tree_idx: np.ndarray, abs_errors: torch.Tensor) -> None:
         """
         Update the priorities on the sum tree
         """
@@ -291,8 +304,8 @@ class PrioritizedExperienceReplay(Memory):
         for idx, p in zip(tree_idx, priority):
             self.SumTree.update(idx, p)
 
-    def min_train_size_reached(self):
+    def min_train_size_reached(self) -> bool:
         return self.ReplayBuffer.min_train_size_reached()
 
-    def update_n_step(self, new_n_step, new_gamma=None):
+    def update_n_step(self, new_n_step: int, new_gamma: float=None) -> None:
         self.ReplayBuffer.update_n_step(new_n_step, new_gamma)

@@ -1,8 +1,8 @@
 from typing import Literal
 
 from memory.experience_replay import PrioritizedExperienceReplay
-from QNetworks import DQN, DDQN
-from dist_QNetworks import Categorical_DDQN
+from agent.QNetworks import DQN, DDQN
+from agent.dist_QNetworks import Categorical_DDQN
 
 POLICY = {
     "DQN": DQN,
@@ -116,5 +116,5 @@ class RL_Agent:
                 self.memory.update_priorities(tree_idxs, error)
                 avg_loss += loss
 
-            self.policy.update_target_network(self.count // self.train_freq)
+            self.policy.update_target_network(self.count)
             return avg_loss / self.batchsize
