@@ -2,6 +2,7 @@ from typing import Optional, Tuple, Union
 
 from memory.base import Memory, ReplayBatch
 from memory.sumtree import SumTree
+from configs import AgentConfig
 
 import numpy as np
 import torch
@@ -25,33 +26,28 @@ class ReplayBuffer(Memory):
 
     def __init__(
         self,
-        state_dim: int,
-        action_dim: int,
-        min_train_size: int = 256,
-        max_size: int = 1_000,
-        n_step_return: Optional[int] = None,
-        gamma: Optional[int] = None,
+        config: AgentConfig,
         device: torch.device = None
     ):
         super().__init__()
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if device is None else device
-        self.min_train_size = min_train_size
-        self.max_size = max_size
+        self.min_train_size = config.min_train_size
+        self.max_size = config.max_size
 
         self.size = 0           # total experiences stored
         self.seen_size = 0      # total experiences seen cumulatively
         self.head = -1          # index of most recent experience
         self.t = 0              # timestep of most recent experience
 
-        self.state_dim = state_dim if isinstance(state_dim, (list, tuple)) else [state_dim]
-        self.action_dim = action_dim if isinstance(action_dim, (list, tuple)) else [action_dim]
+        self.state_dim = config.state_dim if isinstance(config.state_dim, (list, tuple)) else [config.state_dim]
+        self.action_dim = config.action_dim if isinstance(config.action_dim, (list, tuple)) else [config.action_dim]
 
         # declare what data keys to store
         self.reset()
 
-        self.n_step = 1 if n_step_return is None else n_step_return
-        self.gamma = gamma
+        self.n_step = 1 if config.n_step_return is None else config.n_step_return
+        self.gamma = config.gamma
         self.n_step_gamma = torch.pow(self.gamma, torch.arange(self.n_step)).to(torch.float32).to(self.device)
 
     def reset(self):
@@ -194,33 +190,31 @@ class PrioritizedExperienceReplay(Memory):
     '''
     def __init__(
         self,
-        state_dim: int,
-        action_dim: int,
-        min_train_size: int = 256,
-        max_size: int = 1_000,
-        n_step_return: Optional[int] = None,
-        gamma: Optional[int] = None,
-        device: torch.device = None
+        config: AgentConfig,
+        device: Optional[torch.device] = None
     ):
         super().__init__()
 
         self.ReplayBuffer = ReplayBuffer(
-            state_dim=state_dim,
-            action_dim=action_dim,
-            min_train_size=min_train_size,
-            max_size=max_size,
-            n_step_return=n_step_return,
-            gamma=gamma,
+            state_dim=config.state_dim,
+            action_dim=config.action_dim,
+            min_train_size=config.min_train_size,
+            max_size=config.max_size,
+            n_step_return=config.n_step_return,
+            gamma=config.gamma,
             device=device
         )
-        self.SumTree = SumTree(max_size)
+        self.SumTree = SumTree(config.max_size)
 
-        self.PER_e = 0.01  # Ensure all experiences have a non-zero probability of being samples
-        self.PER_a = 0.6   # Tradeoff between sampling only high priority experiences and sampling randomly
-        self.PER_b = 0.4   # Address the samplming bias via importance-sampling
+        # Tradeoff between sampling only high priority experiences and sampling randomly
+        self.PER_a = config.PER_a if config.PER_a else 0.6
+        # Address the induced samplming bias via importance-sampling weights
+        self.PER_b = config.PER_b if config.PER_b else 0.4
+        # Ensure all experiences have a non-zero probability of being samples
+        self.PER_e = config.PER_e if config.PER_e else 0.01
 
-        self.PER_b_increment = 0.000001
-        self.max_absolute_error = 30.  # clipped abs error
+        self.PER_b_increment = config.PER_b_increment if config.PER_b_increment else 0.000001
+        self.max_absolute_error = config.PER_max_priority if config.PER_max_priority else 30.0
 
     def reset(self) -> None:
         self.ReplayBuffer.reset()
