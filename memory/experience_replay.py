@@ -9,7 +9,7 @@ import torch
 
 
 class ReplayBuffer(Memory):
-    '''
+    """
     Stores agent experiences and samples from them for agent training
     An experience consists of
      - state: representation of a state
@@ -22,7 +22,10 @@ class ReplayBuffer(Memory):
      - Each element of an experience is stored as a separate array of size N * element dim
 
     When a batch of experiences is requested, K experiences are sampled according to a random uniform distribution.
-    '''
+
+    NOTE: This implimentation does not distinguish between epsiode truncation and episode termination. This is not an issue
+    if the environment does truncate episodes after a certain number of steps, but may lead to unexpected behavior otherwise.
+    """
 
     def __init__(
         self,
@@ -51,34 +54,36 @@ class ReplayBuffer(Memory):
         self.n_step_gamma = torch.pow(self.gamma, torch.arange(self.n_step)).to(torch.float32).to(self.device)
 
     def reset(self):
-        '''Initialize the memory Tensors, size, and head pointer'''
+        """Initialize the memory Tensors, size, and head pointer"""
 
         setattr(self, "states", torch.zeros([self.max_size, *self.state_dim], dtype=torch.float32).to(self.device))
         setattr(self, "actions", torch.zeros([self.max_size, *self.action_dim], dtype=torch.int16).to(self.device))
         setattr(self, "next_states", torch.zeros([self.max_size, *self.state_dim], dtype=torch.float32).to(self.device))
         setattr(self, "rewards", torch.zeros([self.max_size], dtype=torch.float32).to(self.device))
         setattr(self, "dones", torch.zeros([self.max_size], dtype=torch.int8).to(self.device))
-        setattr(self, 'timestep', torch.zeros([self.max_size], dtype=torch.int32).to(self.device))
+        setattr(self, "timestep", torch.zeros([self.max_size], dtype=torch.int32).to(self.device))
 
         self.size = 0
         self.head = -1
 
     def update(
-        self, 
-        state: Union[np.ndarray, torch.Tensor], 
-        action: Union[np.ndarray, torch.Tensor], 
-        reward: Union[np.ndarray, torch.Tensor], 
-        next_state: Union[np.ndarray, torch.Tensor], 
-        done: Union[np.ndarray, torch.Tensor]
+        self,
+        state: Union[np.ndarray, torch.Tensor],
+        action: Union[np.ndarray, torch.Tensor],
+        reward: Union[np.ndarray, torch.Tensor],
+        next_state: Union[np.ndarray, torch.Tensor],
+        done: Union[np.ndarray, torch.Tensor],
+        truncated: bool = False
     ) -> None:
-        '''Implementation for update() to add experience to memory, expanding the memory size if necessary'''
+        """Implementation for update() to add experience to memory, expanding the memory size if necessary"""
 
         # Move head pointer. Wrap around if necessary.
         self.head = (self.head + 1) % self.max_size
+
         self.states[self.head] = torch.tensor(state).to(self.device)
-        self.next_states[self.head] = torch.tensor(next_state).to(self.device)
         self.actions[self.head] = action if isinstance(action, torch.Tensor) else torch.tensor(action).to(self.device)
         self.rewards[self.head] = reward
+        self.next_states[self.head] = torch.tensor(next_state).to(self.device)
         self.dones[self.head] = done
         self.timestep[self.head] = self.t
 
@@ -90,25 +95,25 @@ class ReplayBuffer(Memory):
         self.t = 0 if done else self.t + 1
 
     def sample(self, batch_size: int) -> Tuple[np.ndarray, ReplayBatch, torch.Tensor]:
-        '''
+        """
         Returns a batch of batch_size samples. Batch is stored as a dict.
-        Keys are the names of the different elements of an experience. 
+        Keys are the names of the different elements of an experience.
         Values are tensors of the corresponding elements
 
         batch = {
-            'states'     : states,
-            'actions'    : actions,
-            'next_states': next_states,
-            'rewards'    : rewards,
-            'dones'      : dones
+            "states"     : states,
+            "actions"    : actions,
+            "next_states": next_states,
+            "rewards"    : rewards,
+            "dones"      : dones
         }
-        '''
+        """
 
         batch_idx = self.sample_idxs(batch_size)
         return batch_idx, self._get(batch_idx), torch.ones(batch_size).to(self.device)
 
     def _get(self, batch_idx: np.ndarray) -> ReplayBatch:
-        '''Returns a batch of experiences given a list of indices'''
+        """Returns a batch of experiences given a list of indices"""
         # if we are using N-step returns, extend the indxs for n steps.
         if self.n_step is not None:
             batch_idx = torch.stack(
@@ -122,7 +127,7 @@ class ReplayBuffer(Memory):
         # handle N-step returns
         if self.n_step is not None:
             # We need to check if the episode terminates within the following n-steps
-            transitions_firsts = batch['timestep'] == 0
+            transitions_firsts = batch["timestep"] == 0
             mask = torch.zeros_like(transitions_firsts).to(self.device)
 
             # check if there is a terminal state at or prior to the current state.
@@ -131,21 +136,21 @@ class ReplayBuffer(Memory):
 
             # use the mask to zero out rewards after the terminal step,
             # and to set the done values to 1 for all steps after the terminal state
-            batch['rewards'] = (1 - mask.to(torch.int32))*batch['rewards']
-            batch['dones'] = torch.logical_or(mask[:, -1], batch['dones'][:, -1]).to(torch.float16)
+            batch["rewards"] = (1 - mask.to(torch.int32))*batch["rewards"]
+            batch["dones"] = torch.logical_or(mask[:, -1], batch["dones"][:, -1]).to(torch.float16)
 
             # compute sum of discounted rewards
-            batch['rewards'] = torch.sum(torch.mul(self.n_step_gamma, batch['rewards']), axis=1)
+            batch["rewards"] = torch.sum(torch.mul(self.n_step_gamma, batch["rewards"]), axis=1)
 
             # take the initial state, the action, and the final state (this is can be any value if done == 1)
-            batch['states'] = batch['states'][:, 0]
-            batch['actions'] = batch['actions'][:, 0]
-            batch['next_states'] = batch['next_states'][:, -1]
+            batch["states"] = batch["states"][:, 0]
+            batch["actions"] = batch["actions"][:, 0]
+            batch["next_states"] = batch["next_states"][:, -1]
 
         return batch
 
     def sample_idxs(self, batch_size: int) -> np.ndarray:
-        '''Batch indices a sampled random uniformly'''
+        """Batch indices a sampled random uniformly"""
 
         valid = False
         while not valid:
@@ -157,6 +162,7 @@ class ReplayBuffer(Memory):
             if self.n_step is None or np.all((self.head - batch_idx) % self.max_size > self.n_step):
                 valid = True
 
+        # if buffer is full, wrap the indices around to the beginning of the buffer
         if self.size == self.max_size:
             batch_idx = (self.head + batch_idx) % self.size
 
@@ -165,8 +171,8 @@ class ReplayBuffer(Memory):
     def min_train_size_reached(self):
         return self.seen_size >= self.min_train_size
 
-    def update_n_step(self, new_n_step :int, new_gamma: float = None) -> None:
-        '''Update the length of the n-step returns to use in sampling.'''
+    def update_n_step(self, new_n_step: int, new_gamma: float = None) -> None:
+        """Update the length of the n-step returns to use in sampling."""
         self.n_step = new_n_step
         self.gamma = self.gamma if new_gamma is None else new_gamma
         self.n_step_gamma = torch.pow(self.gamma, torch.arange(self.n_step)).to(torch.float32).to(self.device)
@@ -180,14 +186,14 @@ class ReplayBuffer(Memory):
 
 
 class PrioritizedExperienceReplay(Memory):
-    '''
+    """
     Impliment a Replay buffer which utilizes the prioritized replay mechanism from
         PRIORITIZED EXPERIENCE REPLAY, 2016
         Tom Schaul, John Quan, Ioannis Antonoglou and David Silver
         https://arxiv.org/pdf/1511.05952.pdf
 
     Data is stored on GPU, and indexes are produced via a sum tree which tracks the priorities of each transition.
-    '''
+    """
     def __init__(
         self,
         config: AgentConfig,
@@ -221,11 +227,11 @@ class PrioritizedExperienceReplay(Memory):
         self.SumTree.reset()
 
     def update(
-        self, 
-        state: Union[np.ndarray, torch.Tensor], 
-        action: Union[np.ndarray, torch.Tensor], 
-        reward: Union[np.ndarray, torch.Tensor], 
-        next_state: Union[np.ndarray, torch.Tensor], 
+        self,
+        state: Union[np.ndarray, torch.Tensor],
+        action: Union[np.ndarray, torch.Tensor],
+        reward: Union[np.ndarray, torch.Tensor],
+        next_state: Union[np.ndarray, torch.Tensor],
         done: Union[np.ndarray, torch.Tensor]
     ) -> None:
         """
@@ -301,5 +307,5 @@ class PrioritizedExperienceReplay(Memory):
     def min_train_size_reached(self) -> bool:
         return self.ReplayBuffer.min_train_size_reached()
 
-    def update_n_step(self, new_n_step: int, new_gamma: float=None) -> None:
+    def update_n_step(self, new_n_step: int, new_gamma: float = None) -> None:
         self.ReplayBuffer.update_n_step(new_n_step, new_gamma)

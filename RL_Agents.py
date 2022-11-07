@@ -1,5 +1,3 @@
-from typing import Literal, Union
-
 from memory.experience_replay import PrioritizedExperienceReplay, ReplayBuffer
 from agent.QNetworks import DQN, DDQN
 from agent.dist_QNetworks import Categorical_DDQN
@@ -45,16 +43,14 @@ class RL_Agent:
 
         self.batchsize = config.batchsize
         self.train_freq = config.train_freq
-        self.noisy_networks = config.noisy_networks
-
-        # how many training iterations per update
         self.epochs = config.iterations_per_epoch
+        self.default_exploration = "epsilon_greedy" if config.noisy_networks else "boltzmann"
         self.count = 0
 
-    def act(self, state, policy=None):
-        if policy is None:
-            policy = "epsilon_greedy" if self.noisy_networks else "boltzmann"
-        return self.policy.act(state, policy=policy).tolist()
+    def act(self, state, exploration=None):
+        if exploration is None:
+            exploration = "epsilon_greedy" if self.noisy_networks else "boltzmann"
+        return self.policy.act(state, policy=exploration).tolist()
 
     def update(self, state, action, reward, next_state, done):
         self.memory.update(state, [action], reward, next_state, int(done))

@@ -4,27 +4,15 @@ from torch import nn
 from torch import optim
 import torch
 
-from agent.Networks import DuelingNetwork
 from agent.QNetworks import DDQN
+from configs import AgentConfig
 
 
 class Categorical_DDQN(DDQN):
     def __init__(
         self,
-        frame_hist: int,
-        act_dim: int,
-        atoms: int,
-        V_min: float,
-        V_max: float,
-        n_steps: int,
-        gamma: float = 0.99,
-        n_hid: int = 64,
-        lr: float = 1e-4,
-        tau: float = 1.0,
-        epsilon: float = 0.01,
-        device: Optional[torch.cuda.Device] = None,
-        clip_grad_val: Optional[float] = None,
-        network: Optional[nn.Module] = None,
+        config: AgentConfig,
+        device: Optional[torch.device] = None,
     ):
         """
         Implimentation of the Categorical DQN introduced in the paper:
@@ -33,84 +21,40 @@ class Categorical_DDQN(DDQN):
 
         Parameters
         ----------
-        frame_hist : int
-            Number of frames to stack together to form a state
-        act_dim : int
-            Number of actions available to the agent
-        atoms : int
-            Number of atoms in the support of the value distribution
-        V_min : float
-            Minimum value of the support
-        V_max : float
-            Maximum value of the support
-        n_steps : int
-            Number of steps to look ahead for the target distribution
-        gamma : float, optional
-            Discount factor, by default 0.99
-        n_hid : int, optional
-            Number of hidden units in the network, by default 64
-        lr : float, optional
-            Learning rate, by default 1e-4
-        tau : float, optional
-            Temperature for Boltzmann policy, by default 1
-        epsilon : float, optional
-            Epsilon for epsilon greedy policy, by default 0.01
+        config : AgentConfig
+            Agent Configuration and training parameters.
         device : torch.cuda.Device, optional
             Device to run the network on, by default None
         """
 
         super().__init__(
-            frame_hist=frame_hist,
-            act_dim=act_dim,
-            n_steps=n_steps,
-            gamma=gamma,
-            n_hid=n_hid,
-            lr=lr,
-            epsilon=epsilon,
+            config=config,
             device=device,
-            clip_grad_val=clip_grad_val,
-            network=network,
         )
 
         # Categorical Distribution hyper params
-        self.atoms = atoms
-        self.V_min = V_min
-        self.V_max = V_max
-        self.support = torch.linspace(V_min, V_max, atoms).to(self.device)
-        self.dz = (V_max - V_min) / (atoms - 1)
+        self.atoms = config.atoms
+        self.V_min = config.V_min
+        self.V_max = config.V_max
+        self.support = torch.linspace(self.V_min, self.V_max, self.atoms).to(self.device)
+        self.dz = (self.V_max - self.V_min) / (self.atoms - 1)
 
     def init_network(self, network: nn.Module = None) -> None:
         """Initialize the network and optimizer"""
-        if network is None:
-            self.model = DuelingNetwork(
-                self.frame_hist,
-                self.act_dim,
-                atoms=self.atoms,
-                n_hid=self.n_hid,
-                clip_grad_val=self.clip_grad_val,
-            ).to(self.device)
-            self.target = DuelingNetwork(
-                self.frame_hist,
-                self.act_dim,
-                atoms=self.atoms,
-                n_hid=self.n_hid,
-                clip_grad_val=self.clip_grad_val,
-            ).to(self.device)
-        else:
-            self.model = network(
-                self.frame_hist,
-                self.act_dim,
-                atoms=self.atoms,
-                n_hid=self.n_hid,
-                clip_grad_val=self.clip_grad_val,
-            ).to(self.device)
-            self.target = network(
-                self.frame_hist,
-                self.act_dim,
-                atoms=self.atoms,
-                n_hid=self.n_hid,
-                clip_grad_val=self.clip_grad_val,
-            ).to(self.device)
+        self.model = network(
+            self.frame_hist,
+            self.act_dim,
+            atoms=self.atoms,
+            n_hid=self.n_hid,
+            clip_grad_val=self.clip_grad_val,
+        ).to(self.device)
+        self.target = network(
+            self.frame_hist,
+            self.act_dim,
+            atoms=self.atoms,
+            n_hid=self.n_hid,
+            clip_grad_val=self.clip_grad_val,
+        ).to(self.device)
 
         self.target.polyak_update(
             source_network=self.model, source_ratio=1.0

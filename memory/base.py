@@ -21,7 +21,7 @@ class Memory(ABC):
     def reset(self):
         '''Method to fully reset the memory storage and related variables'''
         pass
-    
+
     @abstractmethod
     def update(self, state, action, reward, next_state, done):
         '''Implement memory update given the full info from the latest timestep.'''
@@ -31,5 +31,3 @@ class Memory(ABC):
     def sample(self):
         '''Implement memory sampling mechanism'''
         pass
-
-

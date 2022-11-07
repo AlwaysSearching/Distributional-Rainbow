@@ -1,4 +1,3 @@
-from pydantic import BaseModel
 from typing import Tuple
 from abc import ABC, abstractmethod
 

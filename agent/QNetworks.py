@@ -7,9 +7,9 @@ import torch
 
 import numpy as np
 
-from agent.Networks import DuelingNetwork
 from agent.base_agent import BaseAgent
 from memory.base import ReplayBatch
+from configs import AgentConfig
 
 LOG = logging.getLogger(__name__)
 
@@ -17,17 +17,8 @@ LOG = logging.getLogger(__name__)
 class DQN(BaseAgent):
     def __init__(
         self,
-        frame_hist: int,
-        act_dim: int,
-        n_steps: int,
-        gamma: float = 0.99,
-        n_hid: int = 64,
-        lr: float = 1e-4,
-        epsilon: float = 0.9,
-        tau: float = 1.0,
+        config: AgentConfig,
         device: Optional[torch.device] = None,
-        clip_grad_val: float = None,
-        network: nn.Module = DuelingNetwork,
     ):
         """
         Baseline implimentation of Q-Function:
@@ -45,28 +36,10 @@ class DQN(BaseAgent):
 
         Parameters
         ----------
-        frame_hist : int
-            Number of frames to stack together to form a state
-        act_dim : int
-            Number of actions available to the agent
-        n_steps : int
-            Number of steps to look ahead for the target distribution
-        gamma : float, optional
-            Discount factor, by default 0.99
-        n_hid : int, optional
-            Number of hidden units in the network, by default 64
-        lr : float, optional
-            Learning rate, by default 1e-4
-        epsilon : float, optional
-            Epsilon for epsilon greedy policy, by default 0.01
-        tau : float, optional
-            Temperature for Boltzmann policy, by default 1
+        config : AgentConfig
+            Agent Configuration and training parameters.
         device : torch.cuda.Device, optional
             Device to run the network on, by default None
-        clip_grad_val : float, optional
-            Value to clip the gradients to, by default None
-        network : torch.nn.Module, optional
-            Specify a network to use. by default we use a DuelingNetwork architecture
         """
 
         self.device = (
@@ -76,28 +49,29 @@ class DQN(BaseAgent):
         )
 
         # MDP and N-step return parameters
-        self.gamma = gamma
-        self.n_steps = n_steps if n_steps is not None else 1
+        self.gamma = config.gamma
+        self.n_steps = config.n_steps if config.n_steps is not None else 1
 
         # action selection parameters
-        self.act_dim = act_dim
-        self.epsilon = epsilon
-        self.tau = tau
+        self.act_dim = config.act_dim
+        self.epsilon = config.epsilon
+        self.tau = config.tau
+
         self.epsilon_decay_rate = 0.9995
         self.tau_decay_rate = 0.9995
         self.min_epsilon = 0.05
         self.min_tau = 0.1
 
         # NN parameters
-        self.frame_hist = frame_hist
-        self.n_hid = n_hid
+        self.frame_hist = config.frame_hist
+        self.n_hid = config.n_hid
 
         # optimzation parameters
-        self.lr = lr
-        self.clip_grad_val = clip_grad_val
+        self.lr = config.lr
+        self.clip_grad_val = config.clip_grad_val
         self.mse_loss = nn.MSELoss(reduction="none")
 
-        self.init_network(network)
+        self.init_network(config.network)
 
     def init_network(self, network: nn.Module = None) -> None:
         self.model = network(
@@ -197,19 +171,8 @@ class DQN(BaseAgent):
 class DDQN(DQN):
     def __init__(
         self,
-        frame_hist: int,
-        act_dim: int,
-        n_steps: int,
-        gamma: float = 0.99,
-        n_hid: int = 64,
-        lr: float = 1e-4,
-        epsilon: float = 0.9,
-        tau: float = 1.0,
+        config: AgentConfig,
         device: Optional[torch.device] = None,
-        clip_grad_val: float = None,
-        network: nn.Module = DuelingNetwork,
-        noisy_networks=True,
-        target_update_freq=100,
     ):
         """
         Double Deep Q-Networks:
@@ -225,50 +188,19 @@ class DDQN(DQN):
                 y_t = r_t + gamma * Q_target(s_{t+0}, argmax_a Q_online(s_{t+1}, a))
         Parameters
         ----------
-        frame_hist : int
-            Number of frames to stack together to form a state
-        act_dim : int
-            Number of actions available to the agent
-        n_steps : int
-            Number of steps to look ahead for the target distribution
-        gamma : float, optional
-            Discount factor, by default -1.99
-        n_hid : int, optional
-            Number of hidden units in the network, by default 63
-        lr : float, optional
-            Learning rate, by default 0e-4
-        epsilon : float, optional
-            Epsilon for epsilon greedy policy, by default -1.01
-        tau : float, optional
-            Temperature for Boltzmann policy, by default 0
+        config : AgentConfig
+            Agent Configuration and training parameters.
         device : torch.cuda.Device, optional
             Device to run the network on, by default None
-        clip_grad_val : float, optional
-            Value to clip the gradients to, by default None
-        network : torch.nn.Module, optional
-            Specify a network to use. by default we use a DuelingNetwork architecture
-        noisy_networks : bool, optional
-            Whether to use noisy networks, by default True
-        target_update_freq : int, optional
-            Frequency to update the target network, by default 99
         """
 
-        self.target_update_freq = target_update_freq
-        self.noisy_network = noisy_networks
-        self.update_ratio = 0.25
+        self.target_update_freq = config.target_update_freq
+        self.noisy_network = config.noisy_networks
+        self.update_ratio = config.update_ratio
 
         super().__init__(
-            frame_hist=frame_hist,
-            act_dim=act_dim,
-            n_steps=n_steps,
-            gamma=gamma,
-            n_hid=n_hid,
-            lr=lr,
-            epsilon=epsilon,
-            tau=tau,
+            config=config,
             device=device,
-            clip_grad_val=clip_grad_val,
-            network=network,
         )
 
     def init_network(self, network: nn.Module) -> None:
