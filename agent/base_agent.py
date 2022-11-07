@@ -15,9 +15,9 @@ class BaseAgent(ABC, nn.Module):
     """
 
     @abstractmethod
-    def act(self, state: torch.Tensor, policy: str) -> np.ndarray:
+    def act(self, state: torch.Tensor, explore: bool) -> np.ndarray:
         """
-        Given a state, return an action and the log probability of the action
+        Given a state, return an action 
         """
         pass
 

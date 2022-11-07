@@ -31,26 +31,22 @@ class RL_Agent:
             Pass a device i.e. gpu/cuda/cpu to be used by the agent and replay buffer
         """
 
-        self.memory = REPLAY_BUFFER[config.buffer_type](
+        self.policy = POLICY[config.agent](
             config,
             device=device,
         )
 
-        self.policy = POLICY[config.agent_name](
+        self.memory = REPLAY_BUFFER[config.buffer](
             config,
             device=device,
         )
-
         self.batchsize = config.batchsize
         self.train_freq = config.train_freq
         self.epochs = config.iterations_per_epoch
-        self.default_exploration = "epsilon_greedy" if config.noisy_networks else "boltzmann"
         self.count = 0
 
-    def act(self, state, exploration=None):
-        if exploration is None:
-            exploration = "epsilon_greedy" if self.noisy_networks else "boltzmann"
-        return self.policy.act(state, policy=exploration).tolist()
+    def act(self, state, explore=True):
+        return self.policy.act(state, policy=explore).tolist()
 
     def update(self, state, action, reward, next_state, done):
         self.memory.update(state, [action], reward, next_state, int(done))

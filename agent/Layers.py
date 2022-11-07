@@ -14,7 +14,7 @@ class NoisyLinear(nn.Module):
         https://arxiv.org/pdf/1706.10295.pdf
     '''
 
-    def __init__(self, in_features: int, out_features: int, std_init: float = 0.5):
+    def __init__(self, in_features: int, out_features: int, std_init: float = 0.1):
         """
         Parameters
         ----------

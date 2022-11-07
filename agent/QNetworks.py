@@ -121,27 +121,18 @@ class DQN(BaseAgent):
         action = action_values.argmax()
         return action.cpu().squeeze().numpy()
 
-    def act_boltzmann(self, state):
-        # sample from a Boltzman distribution over the state-action values
-        logits = self.model(state) / self.tau
-        action_pd = torch.distributions.Categorical(logits=logits)
-        action = action_pd.sample()
-        return action.squeeze().numpy()
-
     def act_greedy(self, state):
         # Act greddily with respect to the action values
         action_values = self.model(state).detach()
         action = action_values.argmax()
         return action.cpu().squeeze().numpy()
 
-    def act(self, state, policy="boltzmann"):
+    def act(self, state, explore: bool = True):
         if not torch.is_tensor(state):
             state = torch.Tensor(state).unsqueeze(0).to(self.device)
 
         with torch.no_grad():
-            if policy == "boltzmann":
-                return self.act_boltzmann(state)
-            elif policy == "epsilon_greedy":
+            if explore:
                 return self.act_epsilon_greedy(state)
             else:
                 return self.act_greedy(state)

@@ -8,9 +8,9 @@ class AgentConfig(BaseModel):
 
     Parameters
     ----------
-    agent_name:
+    agent:
         Specify the agent to used.
-    buffer_type:
+    buffer:
         specify the memory buffer to use.
     frame_hist:
         Number of frames to stack together to form a state.
@@ -36,8 +36,6 @@ class AgentConfig(BaseModel):
         The ratio to use in the polyak averaging of the target network.
     n_step_return:
         Number of steps to use in computing N-step returns.
-    tau:
-        Temperature parameter for softmax action selection
     epsilon:
         Epsilon for epsilon greedy policy
     memory_min_train_size:
@@ -84,7 +82,6 @@ class AgentConfig(BaseModel):
     n_step_return: int
 
     # action sampling parameters
-    tau: float
     epsilon: float
 
     # Memory Buffer Parameters
